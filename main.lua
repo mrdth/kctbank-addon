@@ -11,177 +11,29 @@ function ClassicGuildBank:OnInitialize()
   self.db = LibStub("AceDB-3.0"):New("ClassicGuildBankDb", defaults)
 
   ClassicGuildBank:RegisterChatCommand('cgb', 'HandleChatCommand');
-  ClassicGuildBank:RegisterChatCommand('cgb-deposit', 'HandleDepositCommand')
-  ClassicGuildBank:RegisterChatCommand('cgb-history', 'HandleHistoryCommand')
-
-  ClassicGuildBank:InitializeInboxButton();
-  ClassicGuildBank:RegisterEvent('MAIL_SHOW');
 
 end
 
 function ClassicGuildBank:HandleChatCommand(input)  
 
-  local bags = ClassicGuildBank:GetBags()
   local bagItems = ClassicGuildBank:GetBagItems()
 
-  local exportString = '[' .. UnitName('player') .. ',' .. GetMoney() .. ',' .. GetLocale() .. '];'
+  local exportString = '{"character": {"name":"' .. UnitName('player') .. '","currency":' .. GetMoney() .. '},"inventory":'
 
   exportString = exportString .. '['
 
-  for i=1, #bags do
-    if i > 1 then
-      exportString = exportString .. ','
-    end
-
-    exportString = exportString .. bags[i].container .. ',' 
-
-    if bags[i].bagName == nil == false then
-      exportString = exportString .. bags[i].bagName
-    end
-  end
-
-  exportString = exportString .. '];'
-
   for i=1, #bagItems do
-      exportString = exportString .. '[' .. bagItems[i].container .. ',' .. bagItems[i].slot .. ',' .. bagItems[i].itemID .. ',' .. bagItems[i].count .. '];'
-  end
-
-  local deposits = self.db.char.deposits 
-  if #deposits > 0 then
-    exportString  = exportString .. '[DEPOSITS]'
-    for j=1, #deposits do
-      local sender = deposits[j].sender;
-
-      if sender == nil then
-        sender = 'Unkown Sender'
+      exportString = exportString .. '{"id":' .. bagItems[i].itemID .. ',"quantity":' .. bagItems[i].count .. '}'
+      if i < #bagItems then
+        exportString = exportString .. ','
       end
-
-      exportString = exportString .. '[' .. sender .. ',' .. deposits[j].itemId .. ',' .. deposits[j].quantity .. ',' .. deposits[j].money .. '];'
-    end
-
-    tinsert(self.db.char.history, 1, { date=date(), deposits=self.db.char.deposits});
-    self.db.char.deposits = {}
   end
+
+  exportString = exportString .. ']}'
+
+
   ClassicGuildBank:DisplayExportString(exportString)
 
-end
-
-function ClassicGuildBank:HandleDepositCommand(input)
-  local args = {}
-  for s in string.gmatch(input, "%S+") do
-    args[#args+1] = s
-  end
-
-  if #args == 0 then
-    local deposits = self.db.char.deposits
-    ClassicGuildBank:Print( #deposits .. ' item deposits waiting to be exported.  These will be included the next time you run the /cgb command.')
-    return
-  elseif #args == 1 then
-    local arg = args[1]
-
-    if arg == '-h' or arg == '-help' then
-      ClassicGuildBank:Print('Classic Guild Bank Deposit Help:')
-      ClassicGuildBank:Print('No argument    -- Lists out the number of deposits awaiting export')
-      ClassicGuildBank:Print('-v or -verbose -- Lists out the deposits awaiting export including item name and sender')
-      ClassicGuildBank:Print('-clear         -- Removes all deposits waiting to be exported')
-      return
-    end
-
-    if arg == '-v' or arg == '-verbose' then
-      local deposits = self.db.char.deposits
-      for i=1, #deposits do
-        local dep = deposits[i]
-
-        if dep.itemId == -1 then
-          ClassicGuildBank:Print( dep.sender .. ' Deposited - ' .. GetCoinText(dep.money, ",") )
-        else 
-          local itemName, itemLink = GetItemInfo(dep.itemId)
-          ClassicGuildBank:Print( dep.sender .. ' Deposited - ' .. dep.quantity .. ' ' .. itemLink )
-        end
-
-      end
-      return
-    end
-
-    if arg == '-clear' then
-      self.db.char.deposits = {}
-      ClassicGuildBank:Print('Deposits Cleared');
-      return
-    end
-
-  end
-
-end
-
-function ClassicGuildBank:HandleHistoryCommand(input)
-  local args = {}
-  for s in string.gmatch(input, "%S+") do
-    args[#args+1] = s
-  end
-
-  local history = self.db.char.history
-  if #args == 0 then
-    ClassicGuildBank:Print( #history .. ' deposit history entries. typing /cgb-history -[number: 1, 2, 3] will display detailed information about that entry.')
-    return
-
-  elseif #args == 1 then
-    local numArg = tonumber(args[1])
-    if numArg == nil then
-      ClassicGuildBank:Print('/cgb-history requires its first argument to be a number.')
-      return
-    end
-
-    local histNum = math.abs(numArg)
-    
-    if histNum > #history then
-      ClassicGuildBank:Print( 'Argument: ' .. args[1] .. ' is larger than the bounds of the history table.')
-      return
-    end
-    
-    local entry = history[histNum];
-    
-    ClassicGuildBank:Print( 'Entry was added on: ' .. entry.date .. '\n Entry contains ' .. #entry.deposits .. 'Deposits \n Re run this command with the -load argument to load them to be exported.' )
-  elseif #args == 2 and args[2] == '-load' then
-
-    local numArg = tonumber(args[1])
-    if numArg == nil then
-      ClassicGuildBank:Print('/cgb-history requires its first argument to be a number')
-      return
-    end
-
-    local histNum = math.abs(numArg)
-    
-    if histNum > #history then
-      ClassicGuildBank:Print( 'Argument: ' .. args[1] .. ' is larger than the bounds of the history table')
-      return
-    end
-    
-    local entry = history[histNum];
-    ClassicGuildBank:Print( #entry.deposits .. ' Deposits have been added to the deposits awaiting export. Run /cgb to export these deposits' )
-
-    for i=1, #entry.deposits do
-      local deposits = self.db.char.deposits
-      deposits[#deposits + 1] = entry.deposits[i]
-    end
-
-    
-  elseif #args == 2 and args[2] == '-clear' then
-    local histNum = math.abs(tonumber(args[1]))
-    
-    if histNum > #history then
-      ClassicGuildBank:Print( 'Argument: ' .. args[1] .. ' is larger than the bounds of the history table')
-      return
-    end
-    
-    local entry = history[histNum];
-    ClassicGuildBank:Print( 'History entry from ' .. entry.date .. ' with ' .. #entry.deposits .. ' deposits has been deleted.')
-    tremove(history, histNum)
-  end
-  
-end
-
-function ClassicGuildBank:MAIL_SHOW()
-  ClassicGuildBank:GetDeposits()
 end
 
 function ClassicGuildBank:GetBags()
@@ -223,7 +75,7 @@ end
 function ClassicGuildBank:DisplayExportString(exportString)
 
   local encoded = ClassicGuildBank:encode(exportString);
-  
+  self.db.char.exportString = encoded
   CgbFrame:Show();
   CgbFrameScroll:Show()
   CgbFrameScrollText:Show()
@@ -299,33 +151,6 @@ function ClassicGuildBank:encode( str )
 	return concat( t )
 end
 
-function ClassicGuildBank:InitializeInboxButton()
-  local btn = CreateFrame('Button', nil, InboxFrame, 'UIPanelButtonTemplate')
-  btn:SetPoint('BOTTOM', -10, 460)
-  btn:SetText('CGB Send Deposit')
-  btn:SetWidth(130)
-	btn:SetHeight(25)
-  btn:SetScript('OnClick', function()
-    ClassicGuildBank:SendDeposit()
-  end)
-  btn:SetScript('OnEvent', function(__, event)
-    if (event == "PLAYER_LOGIN" and CT_MailMod and CT_MailMod.requestAddOnConflictResolution) then
-      -- asks CT_MailMod to make some room so the button can fit.
-      CT_MailMod:requestAddOnConflictResolution("ClassicGuildBank", 1, btn)
-    end
-  end)
-  btn:RegisterEvent("PLAYER_LOGIN");
-end
-
-function ClassicGuildBank:SendDeposit()
-  MailFrameTab_OnClick(self, 2);
-
-  local uid = string.sub(ClassicGuildBank:CreateGuid(), 1, 8);
-
-  local subject = 'CGBDeposit: ' .. uid;
-
-  SendMailSubjectEditBox:SetText(subject);
-end
 
 function ClassicGuildBank:CreateGuid()
   local random = math.random;
@@ -335,90 +160,4 @@ function ClassicGuildBank:CreateGuid()
       local v = (c == 'x') and random(0, 0xf) or random(8, 0xb);
       return string.format('%x', v);
   end);
-end
-
-
-function ClassicGuildBank:GetDeposits()
-
-  C_Timer.NewTimer(1, function()
-    
-    local numMail = GetInboxNumItems()
-    local numMessages = 0
-    local numItems = 0
-
-    if numMail > 0 then    
-      for mail=1, numMail do
-        local _, _, sender, subject, money, COD, _, hasItem, wasRead, _, _, _, GM = GetInboxHeaderInfo(mail)
-      
-        local isCGBDeposit = subject:sub(1, #'CGBDeposit: ') == 'CGBDeposit: '
-  
-        if isCGBDeposit then
-          local uid = subject:sub(12, 20);
-  
-          if ClassicGuildBank:IsNewDeposit(uid) then
-            numMessages = numMessages + 1
-  
-            if money > 0 then 
-              ClassicGuildBank:TrackDeposit(sender, -1, -1, money, uid)
-            end
-
-            for item=1, ATTACHMENTS_MAX_RECEIVE do
-              local itemName, itemId, _, count, _, _ = GetInboxItem(mail, item)
-              if itemName then 
-                numItems = numItems + 1
-                ClassicGuildBank:TrackDeposit(sender, itemId, count, 0, uid)
-              end
-            end
-          end
-        end
-      end
-    
-      if numItems > 0 then 
-        ClassicGuildBank:Print('Recorded ' .. numItems .. ' item deposits in ' .. numMessages .. ' messages from guild members.')
-        ClassicGuildBank:Print('These deposits will be exported the next time you run the /cgb command.')
-      else
-        ClassicGuildBank:Print('No new deposits were found.')
-      end
-    end
-  end)
-end
-
-function ClassicGuildBank:IsNewDeposit(uid)
-  local returnValue = true;
-
-  local deposits = self.db.char.deposits
-  for i=1, #deposits do
-    local dep = deposits[i]
-
-    if dep.uid == uid then
-      returnValue = false
-    end
-  end
-
-  local history = self.db.char.history
-  for i=1, #history do
-    local historyDeposits = history[i].deposits
-
-    for j=1, #historyDeposits do
-      local historyDeposit = historyDeposits[j]
-
-      if historyDeposit.uid == uid then
-        returnValue = false
-      end
-    end
-  end
-
-  return returnValue;
-end
-
-function ClassicGuildBank:TrackDeposit(sender, itemId, quantity, money, uid)
-  local index = #self.db.char.deposits + 1
-
-  self.db.char.deposits[index] = {
-    sender = sender,
-    itemId = itemId,
-    quantity = quantity,
-    money = money,
-    uid = uid
-  }
 end
